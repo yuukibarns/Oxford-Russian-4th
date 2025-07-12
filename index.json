@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxford Russian Dictionary",
+  "revision": "1.1",
+  "description": "Oxford Russian Dictionary, Fourth edition, Russian-English, Edited by Marcus Wheeler and Boris Unbegaun. ver. 1.1 of 16/02/2023 (GoldenDict). Number of headwords: 50424. Number of entries: 50424.",
+  "sourceLanguage": "ru",
+  "targetLanguage": "en",
+  "format": 3,
+  "author": "Marcus Wheeler and Boris Unbegaun",
+  "attribution": "Oxford University Press",
+  "sequenced": false
+}
