@@ -26,15 +26,15 @@ ACCENT_MAP = {
 }
 
 
-def extract_reading(html_str):
-    """Extract reading from html string if first div contains the reading marker (◉)"""
+def extract_reading(html_str, headword):
+    """Extract reading from html string using headword structure as guide"""
     soup = BeautifulSoup(html_str, "html.parser")
-    
+
     # Get the first div in the document
     first_div = soup.find("div")
     if not first_div or "◉" not in first_div.get_text():
         return None
-    
+
     # Now look for dimgray span within this div
     dimgray_span = first_div.find("span", style=lambda s: s and "color:dimgray" in s)
     if not dimgray_span:
@@ -51,13 +51,68 @@ def extract_reading(html_str):
 
     # Remove all pipe characters
     reading_str = reading_str.replace("|", "")
-    # Remove "(", ")"
-    # Special: возвраща|ть(ся), ю(сь)
-    reading_str = reading_str.replace("(", "")
-    reading_str = reading_str.replace(")", "")
 
-    # Split to get main reading (before comma/semicolon)
-    base_reading = re.split(r"[,;(]", reading_str, maxsplit=1)[0].strip()
+    # Calculate headword space count
+    headword_space_count = headword.count(" ")
+
+    # Split reading string into segments
+    segments = []
+    current_segment = []
+    current_space_count = 0
+
+    for char in reading_str:
+        if char in ",;":
+            if current_segment:  # Only add if not empty
+                segments.append("".join(current_segment).strip())
+                current_segment = []
+                current_space_count = 0
+        elif char == " ":
+            current_space_count += 1
+            if current_space_count > headword_space_count:
+                if current_segment:  # Only add if not empty
+                    segments.append("".join(current_segment).strip())
+                break
+            current_segment.append(char)
+        else:
+            current_segment.append(char)
+
+    # Add the last segment if exists
+    if current_segment:
+        segments.append("".join(current_segment).strip())
+
+    # Take the first valid segment
+    base_reading = segments[0] if segments else reading_str
+
+    base_reading = base_reading.strip().rstrip(":")
+
+    # Handle optional parts in parentheses (like бранч(л)ивый)
+    if "(" in base_reading and ")" in base_reading:
+        # Find the variant that matches headword best
+        variants = [
+            re.sub(r"\([^)]*\)", "", base_reading),  # Without optional parts
+            re.sub(r"\(([^)]+)\)", r"\1", base_reading),  # With optional
+        ]
+
+        # Normalize both strings for comparison
+        def normalize(s):
+            return (
+                s.replace("ё", "е")
+                .replace("\u0301", "")
+                .replace("-", "")
+                .replace(" ", "")
+                .lower()
+            )
+
+        norm_headword = normalize(headword)
+
+        for variant in variants:
+            if normalize(variant) == norm_headword:
+                base_reading = variant
+                break
+
+    # Strip again
+    # Special: о...(also
+    base_reading = re.split(r"[,(]", base_reading, maxsplit=1)[0].strip()
 
     # Count vowels in base reading (ignoring accents)
     vowel_count = sum(
@@ -68,7 +123,7 @@ def extract_reading(html_str):
     if vowel_count == 1:
         base_reading = base_reading.replace("\u0301", "")
 
-    return base_reading
+    return base_reading.strip()
 
 
 def convert_style(style_str):
@@ -160,7 +215,7 @@ def convert_html_to_content(html_str):
     return process_node(root)
 
 
-def convert_to_yomitan(input_lines):
+def convert_to_yomitan(input_lines, debug=False):
     """Convert Oxford Russian dictionary to Yomitan JSON format"""
     entries = []
 
@@ -172,6 +227,8 @@ def convert_to_yomitan(input_lines):
         if not line.strip():
             continue
 
+        line_copy = line
+
         line = line.replace("\\n", "").strip()
         parts = line.split("<", 1)
         if len(parts) < 2:
@@ -180,35 +237,71 @@ def convert_to_yomitan(input_lines):
         headword = parts[0].strip()
         def_html = "<" + parts[1].strip()
 
-        reading = extract_reading(def_html) or headword
+        reading = extract_reading(def_html, headword) or headword
 
-        # Convert HTML to structured content
-        structured_content = convert_html_to_content(def_html)
+        # Normalize both strings for comparison
+        def normalize(s):
+            return (
+                s.replace("ё", "е")
+                .replace("\u0301", "")
+                .replace("-", "")
+                .replace(" ", "")
+                .lower()
+            )
 
-        # Build Yomitan entry with proper schema compliance
-        entry = [
-            headword,  # Term
-            reading,  # Reading
-            "",  # Definition tags
-            "",  # Rules
-            0,  # Score
-            [{"type": "structured-content", "content": structured_content}],
-            idx,  # Sequence
-            "",  # Term tags
-        ]
-        entries.append(entry)
+        norm_reading = normalize(reading)
+        norm_headword = normalize(headword)
+
+        try:
+            if norm_reading != norm_headword:
+                raise ValueError(
+                    f"Reading validation failed: '{reading}'"
+                    f"doesn't match headword '{headword}'\n"
+                    f"norm_reading '{norm_reading}'\n"
+                    f"norm_headword '{norm_headword}'"
+                )
+
+            # Convert HTML to structured content
+            structured_content = convert_html_to_content(def_html)
+
+            # Build Yomitan entry with proper schema compliance
+            entry = [
+                headword,  # Term
+                reading,  # Reading
+                "",  # Definition tags
+                "",  # Rules
+                0,  # Score
+                [{"type": "structured-content", "content": structured_content}],
+                idx,  # Sequence
+                "",  # Term tags
+            ]
+            entries.append(entry)
+
+        except ValueError as e:
+            # Write the line_copy to test.txt when ValueError is raised
+            if debug:
+                with open("test.txt", "a", encoding="utf-8") as f:
+                    f.write(line_copy)
+            # Re-raise the exception if you want to stop execution or handle it elsewhere
+            raise e
 
     return entries
 
 
 # Example usage
 if __name__ == "__main__":
+    # First try the test file
+    with open("test.txt", "r", encoding="utf-8") as f:
+        test_lines = f.readlines()
+
+    test_data = convert_to_yomitan(test_lines)
+
     # Read input from file
     with open("Ru-En_Oxf_Russian4th_v1_1.txt", "r", encoding="utf-8") as f:
         input_lines = f.readlines()
 
     # Convert to Yomitan format
-    yomitan_data = convert_to_yomitan(input_lines)
+    yomitan_data = convert_to_yomitan(input_lines, debug=True)
 
     # Write output to JSON file
     with open("term_bank_1.json", "w", encoding="utf-8") as f:
