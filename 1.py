@@ -46,7 +46,7 @@ def extract_reading(html_str):
     reading_str = reading_str.replace("|", "")
 
     # Split to get main reading (before comma/semicolon)
-    base_reading = re.split(r"[,;]", reading_str, maxsplit=1)[0].strip()
+    base_reading = re.split(r"[,;(]", reading_str, maxsplit=1)[0].strip()
 
     # Count vowels in base reading (ignoring accents)
     vowel_count = sum(
