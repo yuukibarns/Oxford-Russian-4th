@@ -27,9 +27,16 @@ ACCENT_MAP = {
 
 
 def extract_reading(html_str):
-    """Extract reading from dimgray span"""
+    """Extract reading from html string if first div contains the reading marker (◉)"""
     soup = BeautifulSoup(html_str, "html.parser")
-    dimgray_span = soup.find("span", style=lambda s: s and "color:dimgray" in s)
+    
+    # Get the first div in the document
+    first_div = soup.find("div")
+    if not first_div or "◉" not in first_div.get_text():
+        return None
+    
+    # Now look for dimgray span within this div
+    dimgray_span = first_div.find("span", style=lambda s: s and "color:dimgray" in s)
     if not dimgray_span:
         return None
 
@@ -166,12 +173,12 @@ def convert_to_yomitan(input_lines):
             continue
 
         line = line.replace("\\n", "").strip()
-        parts = line.split("\t", 1)
+        parts = line.split("<", 1)
         if len(parts) < 2:
             continue
 
         headword = parts[0].strip()
-        def_html = parts[1].strip()
+        def_html = "<" + parts[1].strip()
 
         reading = extract_reading(def_html) or headword
 
