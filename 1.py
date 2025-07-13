@@ -44,6 +44,10 @@ def extract_reading(html_str):
 
     # Remove all pipe characters
     reading_str = reading_str.replace("|", "")
+    # Remove "(", ")"
+    # Special: возвраща|ть(ся), ю(сь)
+    reading_str = reading_str.replace("(", "")
+    reading_str = reading_str.replace(")", "")
 
     # Split to get main reading (before comma/semicolon)
     base_reading = re.split(r"[,;(]", reading_str, maxsplit=1)[0].strip()
