@@ -26,12 +26,6 @@ ACCENT_MAP = {
 }
 
 
-def add_accent(match):
-    """Replace <u>vowel</u> with accented vowel"""
-    vowel = match.group(1)
-    return ACCENT_MAP.get(vowel, vowel)
-
-
 def extract_reading(html_str):
     """Extract reading from dimgray span"""
     soup = BeautifulSoup(html_str, "html.parser")
@@ -48,12 +42,22 @@ def extract_reading(html_str):
         elif child.name is None:  # Text node
             reading_str += child.string
 
-    # Simply remove all pipe characters
+    # Remove all pipe characters
     reading_str = reading_str.replace("|", "")
 
-    # Remove alternative forms and grammatical annotations after comma
-    reading = re.split(r"[,; ]", reading_str, maxsplit=1)[0].strip()
-    return reading
+    # Split to get main reading (before comma/semicolon)
+    base_reading = re.split(r"[,;]", reading_str, maxsplit=1)[0].strip()
+
+    # Count vowels in base reading (ignoring accents)
+    vowel_count = sum(
+        1 for char in base_reading.replace("\u0301", "") if char.lower() in "аеиоуыэюя"
+    )
+
+    # Remove accents for single-vowel words
+    if vowel_count == 1:
+        base_reading = base_reading.replace("\u0301", "")
+
+    return base_reading
 
 
 def convert_style(style_str):
